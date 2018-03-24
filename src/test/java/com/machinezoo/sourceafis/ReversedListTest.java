@@ -28,12 +28,12 @@ public class ReversedListTest {
 	}
 	@Test public void addAll() {
 		assertTrue(r.addAll(Arrays.asList(10, 20, 30)));
-		assertFalse(r.addAll(Collections.emptyList()));
+		assertFalse(r.addAll(Collections.<Integer>emptyList()));
 		assertEquals(Arrays.asList(30, 20, 10, 1, 2, 3, 4, 5), o);
 	}
 	@Test public void addAllAt() {
 		assertTrue(r.addAll(1, Arrays.asList(10, 20, 30)));
-		assertFalse(r.addAll(1, Collections.emptyList()));
+		assertFalse(r.addAll(1, Collections.<Integer>emptyList()));
 		assertEquals(Arrays.asList(1, 2, 3, 4, 30, 20, 10, 5), o);
 	}
 	@Test(expected = IndexOutOfBoundsException.class) public void addAllAt_bounds() {

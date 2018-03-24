@@ -55,7 +55,7 @@ class Block implements Iterable<Cell> {
 	Block move(Cell delta) {
 		return new Block(x + delta.x, y + delta.y, width, height);
 	}
-	private List<Object> fields() {
+	private List<Integer> fields() {
 		return Arrays.asList(x, y, width, height);
 	}
 	@Override public boolean equals(Object obj) {

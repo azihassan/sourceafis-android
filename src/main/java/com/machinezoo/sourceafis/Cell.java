@@ -82,7 +82,7 @@ class Cell implements Iterable<Cell> {
 	static int serializedSize() {
 		return 8;
 	}
-	private List<Object> fields() {
+	private List<Integer> fields() {
 		return Arrays.asList(x, y);
 	}
 	@Override public boolean equals(Object obj) {

@@ -1,6 +1,9 @@
 // Part of SourceAFIS: https://sourceafis.machinezoo.com
 package com.machinezoo.sourceafis;
 
+import java8.util.function.ToIntFunction;
+import java8.util.stream.StreamSupport;
+
 import java.nio.*;
 import java.util.*;
 
@@ -193,8 +196,7 @@ class Skeleton {
 			for (SkeletonRidge ridge : minutia.ridges) {
 				if (!ridge.points.get(0).equals(minutia.position)) {
 					Cell[] filling = ridge.points.get(0).lineTo(minutia.position);
-					for (int i = 1; i < filling.length; ++i)
-						ridge.reversed.points.add(filling[i]);
+					ridge.reversed.points.addAll(Arrays.asList(filling).subList(1, filling.length));
 				}
 			}
 		}
@@ -230,8 +232,7 @@ class Skeleton {
 							SkeletonRidge merged = new SkeletonRidge();
 							merged.start(minutia);
 							merged.end(end);
-							for (Cell point : minutia.position.lineTo(end.position))
-								merged.points.add(point);
+							Collections.addAll(merged.points, minutia.position.lineTo(end.position));
 						}
 						break;
 					}
@@ -304,8 +305,7 @@ class Skeleton {
 	}
 	private static void addGapRidge(BooleanMap shadow, Gap gap, Cell[] line) {
 		SkeletonRidge ridge = new SkeletonRidge();
-		for (Cell point : line)
-			ridge.points.add(point);
+		Collections.addAll(ridge.points, line);
 		ridge.start(gap.end1);
 		ridge.end(gap.end2);
 		for (Cell point : line)
@@ -344,8 +344,7 @@ class Skeleton {
 					removed = removed.reversed;
 				}
 				extended.points.remove(extended.points.size() - 1);
-				for (Cell point : removed.points)
-					extended.points.add(point);
+				extended.points.addAll(removed.points);
 				extended.end(removed.end());
 				removed.detach();
 			}
@@ -370,7 +369,12 @@ class Skeleton {
 		return shadow;
 	}
 	ByteBuffer serialize() {
-		ByteBuffer buffer = ByteBuffer.allocate(minutiae.stream().mapToInt(m -> m.serializedSize()).sum());
+		ByteBuffer buffer = ByteBuffer.allocate(StreamSupport.stream(minutiae).mapToInt(new ToIntFunction<SkeletonMinutia>() {
+			@Override
+			public int applyAsInt(SkeletonMinutia m) {
+				return m.serializedSize();
+			}
+		}).sum());
 		for (SkeletonMinutia minutia : minutiae)
 			minutia.write(buffer);
 		buffer.flip();

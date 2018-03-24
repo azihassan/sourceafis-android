@@ -26,12 +26,12 @@ public class CircularListTest {
 		l.add(6, 10);
 	}
 	@Test public void addAll() {
-		assertFalse(l.addAll(Collections.emptyList()));
+		assertFalse(l.addAll(Collections.<Integer>emptyList()));
 		assertTrue(l.addAll(Arrays.asList(11, 12, 13)));
 		assertEquals(Arrays.asList(1, 2, 3, 4, 5, 11, 12, 13), l);
 	}
 	@Test public void addAllAt() {
-		assertFalse(l.addAll(3, Collections.emptyList()));
+		assertFalse(l.addAll(3, Collections.<Integer>emptyList()));
 		assertTrue(l.addAll(3, Arrays.asList(11, 12, 13)));
 		assertEquals(Arrays.asList(1, 2, 3, 11, 12, 13, 4, 5), l);
 	}

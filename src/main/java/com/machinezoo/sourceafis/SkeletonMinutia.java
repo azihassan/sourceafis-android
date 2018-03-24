@@ -1,8 +1,13 @@
 // Part of SourceAFIS: https://sourceafis.machinezoo.com
 package com.machinezoo.sourceafis;
 
+import java8.util.function.Predicate;
+import java8.util.function.ToIntFunction;
+import java8.util.stream.StreamSupport;
+
 import java.nio.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 class SkeletonMinutia {
 	final Cell position;
@@ -29,7 +34,17 @@ class SkeletonMinutia {
 				ridge.write(buffer);
 	}
 	int serializedSize() {
-		return ridges.stream().filter(r -> r.points instanceof CircularList).mapToInt(r -> r.serializedSize()).sum();
+		return StreamSupport.stream(ridges).filter(new Predicate<SkeletonRidge>() {
+			@Override
+			public boolean test(SkeletonRidge r) {
+				return r.points instanceof CircularList;
+			}
+		}).mapToInt(new ToIntFunction<SkeletonRidge>() {
+			@Override
+			public int applyAsInt(SkeletonRidge r) {
+				return r.serializedSize();
+			}
+		}).sum();
 	}
 	@Override public String toString() {
 		return String.format("%s*%d", position.toString(), ridges.size());

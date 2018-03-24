@@ -1,14 +1,21 @@
 // Part of SourceAFIS: https://sourceafis.machinezoo.com
 package com.machinezoo.sourceafis;
 
-import static java.util.stream.Collectors.*;
 import java.awt.image.*;
 import java.io.*;
 import java.util.*;
-import java.util.stream.*;
 import javax.imageio.*;
 import com.google.gson.*;
 import com.machinezoo.noexception.*;
+import com.machinezoo.noexception.throwing.ThrowingSupplier;
+import java8.util.Comparators;
+import java8.util.J8Arrays;
+import java8.util.Lists;
+import java8.util.Optional;
+import java8.util.function.*;
+import java8.util.stream.Collectors;
+import java8.util.stream.RefStreams;
+import java8.util.stream.StreamSupport;
 
 class TemplateBuilder {
 	FingerprintTransparency transparency = FingerprintTransparency.none;
@@ -122,7 +129,12 @@ class TemplateBuilder {
 			int extra = in.readUnsignedShort();
 			// variable-length extra data section
 			in.skipBytes(extra);
-			minutiae = list.stream().toArray(Minutia[]::new);
+			minutiae = StreamSupport.stream(list).toArray(new IntFunction<Minutia[]>() {
+				@Override
+				public Minutia[] apply(int i) {
+					return new Minutia[i];
+				}
+			});
 			transparency.logIsoMinutiae(this);
 		} catch (IOException e) {
 			throw new IllegalArgumentException("Invalid ISO 19794-2 template", e);
@@ -130,8 +142,13 @@ class TemplateBuilder {
 		shuffleMinutiae();
 		buildEdgeTable();
 	}
-	DoubleMap readImage(byte[] serialized) {
-		BufferedImage buffered = Exceptions.sneak().get(() -> ImageIO.read(new ByteArrayInputStream(serialized)));
+	DoubleMap readImage(final byte[] serialized) {
+		BufferedImage buffered = Exceptions.sneak().get(new ThrowingSupplier<BufferedImage>() {
+			@Override
+			public BufferedImage get() throws Exception {
+				return ImageIO.read(new ByteArrayInputStream(serialized));
+			}
+		});
 		if (buffered == null)
 			throw new IllegalArgumentException("Unsupported image format");
 		int width = buffered.getWidth();
@@ -263,11 +280,16 @@ class TemplateBuilder {
 		List<Double> sortedContrast = new ArrayList<>();
 		for (Cell block : contrast.size())
 			sortedContrast.add(contrast.get(block));
-		sortedContrast.sort(Comparator.<Double>naturalOrder().reversed());
+		Lists.sort(sortedContrast, java8.util.Comparators.<Double> reverseOrder());
 		int pixelsPerBlock = blocks.pixels.area() / blocks.primary.blocks.area();
 		int sampleCount = Math.min(sortedContrast.size(), Parameters.relativeContrastSample / pixelsPerBlock);
 		int consideredBlocks = Math.max((int)Math.round(sampleCount * Parameters.relativeContrastPercentile), 1);
-		double averageContrast = sortedContrast.stream().mapToDouble(n -> n).limit(consideredBlocks).average().getAsDouble();
+		double averageContrast = StreamSupport.stream(sortedContrast).mapToDouble(new ToDoubleFunction<Double>() {
+			@Override
+			public double applyAsDouble(Double n) {
+				return n;
+			}
+		}).limit(consideredBlocks).average().getAsDouble();
 		double limit = averageContrast * Parameters.minRelativeContrast;
 		BooleanMap result = new BooleanMap(blocks.primary.blocks);
 		for (Cell block : blocks.primary.blocks)
@@ -381,12 +403,17 @@ class TemplateBuilder {
 		for (int i = 0; i < Parameters.orientationSplit; ++i) {
 			ConsideredOrientation[] orientations = splits[i] = new ConsideredOrientation[Parameters.orientationsChecked];
 			for (int j = 0; j < Parameters.orientationsChecked; ++j) {
-				ConsideredOrientation sample = orientations[j] = new ConsideredOrientation();
+				final ConsideredOrientation sample = orientations[j] = new ConsideredOrientation();
 				do {
 					double angle = random.next() * Math.PI;
 					double distance = Doubles.interpolateExponential(Parameters.minOrientationRadius, Parameters.maxOrientationRadius, random.next());
 					sample.offset = Angle.toVector(angle).multiply(distance).round();
-				} while (sample.offset.equals(Cell.zero) || sample.offset.y < 0 || Arrays.stream(orientations).limit(j).anyMatch(o -> o.offset.equals(sample.offset)));
+				} while (sample.offset.equals(Cell.zero) || sample.offset.y < 0 || J8Arrays.stream(orientations).limit(j).anyMatch(new Predicate<ConsideredOrientation>() {
+					@Override
+					public boolean test(ConsideredOrientation o) {
+						return o.offset.equals(sample.offset);
+					}
+				}));
 				sample.orientation = Angle.toVector(Angle.add(Angle.toOrientation(Angle.atan(sample.offset.toPoint())), Math.PI));
 			}
 		}
@@ -594,59 +621,116 @@ class TemplateBuilder {
 				shrunk.set(x, y, mask.get(x, y - amount) && mask.get(x, y + amount) && mask.get(x - amount, y) && mask.get(x + amount, y));
 		return shrunk;
 	}
-	private void collectMinutiae(Skeleton skeleton, MinutiaType type) {
-		minutiae = Stream.concat(
-			Arrays.stream(Optional.ofNullable(minutiae).orElse(new Minutia[0])),
-			skeleton.minutiae.stream()
-				.filter(m -> m.ridges.size() == 1)
-				.map(m -> new Minutia(m.position, m.ridges.get(0).direction(), type)))
-			.toArray(Minutia[]::new);
+	private void collectMinutiae(Skeleton skeleton, final MinutiaType type) {
+		minutiae = RefStreams.concat(
+			J8Arrays.stream(Optional.ofNullable(minutiae).orElse(new Minutia[0])),
+            StreamSupport.stream(skeleton.minutiae)
+				.filter(new Predicate<SkeletonMinutia>() {
+					@Override
+					public boolean test(SkeletonMinutia m) {
+						return m.ridges.size() == 1;
+					}
+				})
+				.map(new Function<SkeletonMinutia, Object>() {
+					@Override
+					public Object apply(SkeletonMinutia m) {
+						return new Minutia(m.position, m.ridges.get(0).direction(), type);
+					}
+				}))
+			.toArray(new IntFunction<Minutia[]>() {
+				@Override
+				public Minutia[] apply(int i) {
+					return new Minutia[i];
+				}
+			});
 	}
-	private void maskMinutiae(BooleanMap mask) {
-		minutiae = Arrays.stream(minutiae)
-			.filter(minutia -> {
-				Cell arrow = Angle.toVector(minutia.direction).multiply(-Parameters.maskDisplacement).round();
-				return mask.get(minutia.position.plus(arrow), false);
+	private void maskMinutiae(final BooleanMap mask) {
+		minutiae = J8Arrays.stream(minutiae)
+			.filter(new Predicate<Minutia>() {
+				@Override
+				public boolean test(Minutia minutia) {
+					Cell arrow = Angle.toVector(minutia.direction).multiply(-Parameters.maskDisplacement).round();
+					return mask.get(minutia.position.plus(arrow), false);
+				}
 			})
-			.toArray(Minutia[]::new);
+			.toArray(new IntFunction<Minutia[]>() {
+				@Override
+				public Minutia[] apply(int i) {
+					return new Minutia[i];
+				}
+			});
 		transparency.logInnerMinutiae(this);
 	}
 	private void removeMinutiaClouds() {
-		int radiusSq = Integers.sq(Parameters.minutiaCloudRadius);
-		Set<Minutia> removed = Arrays.stream(minutiae)
-			.filter(minutia -> Parameters.maxCloudSize < Arrays.stream(minutiae)
-				.filter(neighbor -> neighbor.position.minus(minutia.position).lengthSq() <= radiusSq)
-				.count() - 1)
-			.collect(toSet());
-		minutiae = Arrays.stream(minutiae)
-			.filter(minutia -> !removed.contains(minutia))
-			.toArray(Minutia[]::new);
+		final int radiusSq = Integers.sq(Parameters.minutiaCloudRadius);
+		final Set<Minutia> removed = J8Arrays.stream(minutiae)
+			.filter(new Predicate<Minutia>() {
+						@Override
+						public boolean test(final Minutia minutia) {
+							return Parameters.maxCloudSize < J8Arrays.stream(minutiae)
+									.filter(new Predicate<Minutia>() {
+										@Override
+										public boolean test(Minutia neighbor) {
+											return neighbor.position.minus(minutia.position).lengthSq() <= radiusSq;
+										}
+									})
+									.count() - 1;
+						}
+					}
+			).collect(Collectors.<Minutia>toSet());
+		minutiae = J8Arrays.stream(minutiae)
+			.filter(new Predicate<Minutia>() {
+				@Override
+				public boolean test(Minutia minutia) {
+					return !removed.contains(minutia);
+				}
+			})
+			.toArray(new IntFunction<Minutia[]>() {
+				@Override
+				public Minutia[] apply(int i) {
+					return new Minutia[i];
+				}
+			});
 		transparency.logRemovedMinutiaClouds(this);
 	}
 	private void limitTemplateSize() {
 		if (minutiae.length > Parameters.maxMinutiae) {
-			minutiae = Arrays.stream(minutiae)
-				.sorted(Comparator.<Minutia>comparingInt(
-					minutia -> Arrays.stream(minutiae)
-						.mapToInt(neighbor -> minutia.position.minus(neighbor.position).lengthSq())
-						.sorted()
-						.skip(Parameters.sortByNeighbor)
-						.findFirst().orElse(Integer.MAX_VALUE))
-					.reversed())
-				.limit(Parameters.maxMinutiae)
-				.toArray(Minutia[]::new);
+			List<Minutia> sorted = J8Arrays.stream(minutiae)
+				.sorted(Comparators.comparingInt(
+						new ToIntFunction<Minutia>() {
+							@Override
+							public int applyAsInt(final Minutia minutia) {
+								return J8Arrays.stream(minutiae)
+										.mapToInt(new ToIntFunction<Minutia>() {
+											@Override
+											public int applyAsInt(Minutia neighbor) {
+												return minutia.position.minus(neighbor.position).lengthSq();
+											}
+										})
+										.sorted()
+										.skip(Parameters.sortByNeighbor)
+										.findFirst().orElse(Integer.MAX_VALUE);
+							}
+						})
+				).collect(Collectors.<Minutia>toList());
+			Collections.reverse(sorted);
+			minutiae = sorted.subList(0, Parameters.maxMinutiae).toArray(new Minutia[0]);
 		}
 		transparency.logTopMinutiae(this);
 	}
 	private void shuffleMinutiae() {
-		int prime = 1610612741;
+		int seed = 0;
+		for (Minutia minutia : minutiae)
+			seed += minutia.direction + minutia.position.x + minutia.position.y + minutia.type.ordinal();
+		Collections.shuffle(Arrays.asList(minutiae), new Random(seed));
+		/*int prime = 1610612741;
 		Arrays.sort(minutiae, Comparator
 			.comparing((Minutia m) -> ((m.position.x * prime) + m.position.y) * prime)
 			.thenComparing(m -> m.position.x)
 			.thenComparing(m -> m.position.y)
 			.thenComparing(m -> m.direction)
 			.thenComparing(m -> m.type));
-		transparency.logShuffledMinutiae(this);
+		transparency.logShuffledMinutiae(this);*/
 	}
 	private void buildEdgeTable() {
 		edges = new NeighborEdge[minutiae.length][];
@@ -665,7 +749,19 @@ class TemplateBuilder {
 				if (neighbor != reference && referencePosition.minus(minutiae[neighbor].position).lengthSq() <= sqMaxDistance)
 					star.add(new NeighborEdge(minutiae, reference, neighbor));
 			}
-			star.sort(Comparator.<NeighborEdge>comparingInt(e -> e.length).thenComparingInt(e -> e.neighbor));
+			Comparator<NeighborEdge> left = Comparators.comparingInt(new ToIntFunction<NeighborEdge>() {
+				@Override
+				public int applyAsInt(NeighborEdge e) {
+					return e.length;
+				}
+			});
+			Comparator<NeighborEdge> right = Comparators.comparingInt(new ToIntFunction<NeighborEdge>() {
+				@Override
+				public int applyAsInt(NeighborEdge e) {
+					return e.neighbor;
+				}
+			});
+			Lists.sort(star, Comparators.thenComparing(left, right));
 			while (star.size() > Parameters.edgeTableNeighbors)
 				star.remove(star.size() - 1);
 			edges[reference] = star.toArray(new NeighborEdge[star.size()]);

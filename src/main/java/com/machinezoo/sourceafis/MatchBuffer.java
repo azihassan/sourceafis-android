@@ -1,19 +1,35 @@
 // Part of SourceAFIS: https://sourceafis.machinezoo.com
 package com.machinezoo.sourceafis;
 
-import java.util.*;
+import java8.util.*;
 import gnu.trove.map.hash.*;
 import gnu.trove.set.hash.*;
+import java8.util.function.Function;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.PriorityQueue;
 
 class MatchBuffer {
-	private static final ThreadLocal<MatchBuffer> local = ThreadLocal.withInitial(MatchBuffer::new);
+	private static final ThreadLocal<MatchBuffer> local = new ThreadLocal<MatchBuffer>() {
+		@Override
+		protected MatchBuffer initialValue() {
+			return new MatchBuffer();
+		}
+	};
 	FingerprintTransparency transparency = FingerprintTransparency.none;
 	ImmutableTemplate probe;
 	private TIntObjectHashMap<List<IndexedEdge>> edgeHash;
 	ImmutableTemplate candidate;
 	private MinutiaPair[] pool = new MinutiaPair[1];
 	private int pooled;
-	private PriorityQueue<MinutiaPair> queue = new PriorityQueue<>(Comparator.comparing(p -> p.distance));
+	private PriorityQueue<MinutiaPair> queue = new PriorityQueue<>(5, Comparators.comparing(new Function<MinutiaPair, Comparable>() {
+		@Override
+		public Comparable apply(MinutiaPair p) {
+			return p.distance;
+		}
+	}));
 	int count;
 	MinutiaPair[] tree;
 	private MinutiaPair[] byProbe;

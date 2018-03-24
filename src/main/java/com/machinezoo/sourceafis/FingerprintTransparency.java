@@ -4,10 +4,14 @@ package com.machinezoo.sourceafis;
 import java.io.*;
 import java.nio.*;
 import java.nio.charset.*;
-import java.util.*;
-import java.util.function.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import com.google.gson.*;
 import gnu.trove.map.hash.*;
+import java8.util.function.Supplier;
 
 /**
  * Algorithm transparency API that can capture all intermediate data structures produced by SourceAFIS algorithm.
@@ -106,8 +110,13 @@ public abstract class FingerprintTransparency implements AutoCloseable {
 	void logScaledImage(DoubleMap image) {
 		logDoubleMap("scaled-image", image);
 	}
-	void logBlockMap(BlockMap blocks) {
-		log("block-map", ".json", json(() -> blocks));
+	void logBlockMap(final BlockMap blocks) {
+		log("block-map", ".json", json(new Supplier<Object>() {
+			@Override
+			public Object get() {
+				return blocks;
+			}
+		}));
 	}
 	void logHistogram(Histogram histogram) {
 		logHistogram("histogram", histogram);
@@ -199,65 +208,160 @@ public abstract class FingerprintTransparency implements AutoCloseable {
 	void logShuffledMinutiae(TemplateBuilder template) {
 		logMinutiae("shuffled-minutiae", template);
 	}
-	void logEdgeTable(NeighborEdge[][] table) {
-		log("edge-table", ".json", json(() -> table));
+	void logEdgeTable(final NeighborEdge[][] table) {
+		log("edge-table", ".json", json(new Supplier<Object>() {
+			@Override
+			public Object get() {
+				return table;
+			}
+		}));
 	}
 	void logDeserializedMinutiae(TemplateBuilder template) {
 		logMinutiae("deserialized-minutiae", template);
 	}
-	void logIsoMetadata(int width, int height, int cmPixelsX, int cmPixelsY) {
+	void logIsoMetadata(final int width, final int height, final int cmPixelsX, final int cmPixelsY) {
 		if (logging())
-			log("iso-metadata", ".json", json(() -> new JsonIsoMetadata(width, height, cmPixelsX, cmPixelsY)));
+			log("iso-metadata", ".json", json(new Supplier<Object>() {
+				@Override
+				public Object get() {
+					return new JsonIsoMetadata(width, height, cmPixelsX, cmPixelsY);
+				}
+			}));
 	}
 	void logIsoMinutiae(TemplateBuilder template) {
 		logMinutiae("iso-minutiae", template);
 	}
-	void logEdgeHash(TIntObjectHashMap<List<IndexedEdge>> edgeHash) {
-		log("edge-hash", ".dat", () -> IndexedEdge.serialize(edgeHash));
+	void logEdgeHash(final TIntObjectHashMap<List<IndexedEdge>> edgeHash) {
+		log("edge-hash", ".dat", new Supplier<ByteBuffer>() {
+			@Override
+			public ByteBuffer get() {
+				return IndexedEdge.serialize(edgeHash);
+			}
+		});
 	}
-	void logRootPairs(int count, MinutiaPair[] roots) {
+	void logRootPairs(final int count, final MinutiaPair[] roots) {
 		if (logging())
-			log("root-pairs", ".json", json(() -> JsonPair.roots(count, roots)));
+			log("root-pairs", ".json", json(new Supplier<Object>() {
+				@Override
+				public Object get() {
+					return JsonPair.roots(count, roots);
+				}
+			}));
 	}
 	void logSupportingEdge(MinutiaPair pair) {
 		if (logging())
 			supportingEdges.add(new JsonEdge(pair));
 	}
-	void logPairing(int count, MinutiaPair[] pairs) {
+	void logPairing(final int count, final MinutiaPair[] pairs) {
 		if (logging()) {
-			log("pairing", ".json", json(() -> new JsonPairing(count, pairs, supportingEdges)));
+			log("pairing", ".json", json(new Supplier<Object>() {
+				@Override
+				public Object get() {
+					return new JsonPairing(count, pairs, supportingEdges);
+				}
+			}));
 			supportingEdges.clear();
 		}
 	}
-	void logScore(Score score) {
+	void logScore(final Score score) {
 		if (logging())
-			log("score", ".json", json(() -> score));
+			log("score", ".json", json(new Supplier<Object>() {
+				@Override
+				public Object get() {
+					return score;
+				}
+			}));
 	}
-	void logBestMatch(int nth) {
+	void logBestMatch(final int nth) {
 		if (logging())
-			log("best-match", ".json", json(() -> new JsonBestMatch(nth)));
+			log("best-match", ".json", json(new Supplier<Object>() {
+				@Override
+				public Object get() {
+					return new JsonBestMatch(nth);
+				}
+			}));
 	}
-	private void logSkeleton(String name, Skeleton skeleton) {
-		log(skeleton.type.prefix + name, ".json", json(() -> new JsonSkeleton(skeleton)), ".dat", skeleton::serialize);
+	private void logSkeleton(String name, final Skeleton skeleton) {
+		log(skeleton.type.prefix + name, ".json", json(new Supplier<Object>() {
+			@Override
+			public Object get() {
+				return new JsonSkeleton(skeleton);
+			}
+		}), ".dat", new Supplier<ByteBuffer>() {
+			@Override
+			public ByteBuffer get() {
+				return skeleton.serialize();
+			}
+		});
 	}
-	private void logMinutiae(String name, TemplateBuilder template) {
+	private void logMinutiae(String name, final TemplateBuilder template) {
 		if (logging())
-			log(name, ".json", json(() -> new JsonTemplate(template.size, template.minutiae)));
+			log(name, ".json", json(new Supplier<Object>() {
+				@Override
+				public Object get() {
+					return new JsonTemplate(template.size, template.minutiae);
+				}
+			}));
 	}
-	private void logHistogram(String name, Histogram histogram) {
-		log(name, ".dat", histogram::serialize, ".json", json(histogram::json));
+	private void logHistogram(String name, final Histogram histogram) {
+		log(name, ".dat", new Supplier<ByteBuffer>() {
+			@Override
+			public ByteBuffer get() {
+				return histogram.serialize();
+			}
+		}, ".json", json(new Supplier<Object>() {
+			@Override
+			public Object get() {
+				return histogram.json();
+			}
+		}));
 	}
-	private void logPointMap(String name, PointMap map) {
-		log(name, ".dat", map::serialize, ".json", json(map::json));
+	private void logPointMap(String name, final PointMap map) {
+		log(name, ".dat", new Supplier<ByteBuffer>() {
+			@Override
+			public ByteBuffer get() {
+				return map.serialize();
+			}
+		}, ".json", json(new Supplier<Object>() {
+			@Override
+			public Object get() {
+				return map.json();
+			}
+		}));
 	}
-	private void logDoubleMap(String name, DoubleMap map) {
-		log(name, ".dat", map::serialize, ".json", json(map::json));
+	private void logDoubleMap(String name, final DoubleMap map) {
+		log(name, ".dat", new Supplier<ByteBuffer>() {
+			@Override
+			public ByteBuffer get() {
+				return map.serialize();
+			}
+		}, ".json", json(new Supplier<Object>() {
+			@Override
+			public Object get() {
+				return map.json();
+			}
+		}));
 	}
-	private void logBooleanMap(String name, BooleanMap map) {
-		log(name, ".dat", map::serialize, ".json", json(map::json));
+	private void logBooleanMap(String name, final BooleanMap map) {
+		log(name, ".dat", new Supplier<ByteBuffer>() {
+			@Override
+			public ByteBuffer get() {
+				return map.serialize();
+			}
+		}, ".json", json(new Supplier<Object>() {
+			@Override
+			public Object get() {
+				return map.json();
+			}
+		}));
 	}
-	private Supplier<ByteBuffer> json(Supplier<Object> supplier) {
-		return () -> ByteBuffer.wrap(new GsonBuilder().setPrettyPrinting().create().toJson(supplier.get()).getBytes(StandardCharsets.UTF_8));
+	private Supplier<ByteBuffer> json(final Supplier<Object> supplier) {
+		return new Supplier<ByteBuffer>() {
+			@Override
+			public ByteBuffer get() {
+				return ByteBuffer.wrap(new GsonBuilder().setPrettyPrinting().create().toJson(supplier.get()).getBytes(StandardCharsets.UTF_8));
+			}
+		};
 	}
 	private void log(String name, String suffix, Supplier<ByteBuffer> supplier) {
 		Map<String, Supplier<ByteBuffer>> map = new HashMap<>();
